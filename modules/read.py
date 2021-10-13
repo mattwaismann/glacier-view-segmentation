@@ -1,6 +1,5 @@
 import rasterio
 from rasterio.mask import mask
-import fiona 
 import os
 import geopandas as gpd
 from rasterio.warp import calculate_default_transform, reproject, Resampling
@@ -34,38 +33,24 @@ def reproject_raster(infp, outfp, dst_crs='EPSG:4326'):
                     resampling=Resampling.nearest,
                     dst_nodata = 0)
 
-def get_images_and_masks(tifs,file_path,shp_name,poly_path):
-    glac_id_match = [tif.split('.')[0] for tif in tifs]
-    print(len(glac_id_match)) #remove tif ending
-    polys = gpd.read_file(poly_path + '/{}'.format(shp_name))
-    print(polys.shape) #obtain shapevalue geopandas DataFrame
-    rel_ids = polys.iloc[:,[0]].isin(glac_id_match).iloc[:,0] #subset the glaciers we have
-    polys = polys[rel_ids]
-    print(polys.shape) #subset the glaciers we have
-    rel_ordered_ids = list(polys.sort_values(by='glac_id').index) #obtain indicies of ordered glaciers we have
-    
-    with fiona.open(poly_path + '/{}'.format(shp_name)) as shapefile:
-        geoms = [feature['geometry'] for feature in shapefile]
-    geoms = list(np.array(geoms)[rel_ordered_ids])
-     #obtain geoms that match the ordering of glaciers we have
-    masks = []        # list of all the masks
-    rasters = []  # list of all the rasters in original shape
-    for i in range(len(tifs)):
-        print(i)
-        with rasterio.open(file_path + '/{}'.format(tifs[i])) as src:
-            masked, _ = mask(src, [geoms[i]], nodata = 0.0)
+def get_rasters(dir_path_rasters, tifs):
+    rasters = []
+    for tif in tifs:
+        with rasterio.open(os.path.join(dir_path_rasters,tif)) as src:
+            rasters.append(src.read())
+    return rasters
+                          
+def get_masks(dir_path_rasters, tifs, df_polys):
+    geoms = list(df_polys.geometry)
+    masks = []
+    for idx,tif in enumerate(tifs):
+        with rasterio.open(os.path.join(dir_path_rasters,tif)) as src:
+            masked, _ = mask(src, [geoms[idx]], nodata = 0.0)
             masks.append(masked)
-            rasters.append(src.read())
-    masks = [mask.astype('bool').astype('int') for mask in masks]
-    return (glac_id_match,rasters,masks)
-
-def get_images(tifs,file_path):
-    glac_id_match = [tif.split('.')[0] for tif in tifs] #remove tif ending
-    rasters = []  # list of all the rasters in original shape
-    for i in range(len(tifs)):
-        with rasterio.open(file_path + '/{}'.format(tifs[i])) as src:
-            rasters.append(src.read())
-    return (glac_id_match,rasters)
+    masks = [mask[[0],:,:].astype('bool').astype('int') for mask in masks]
+    return masks
+    
+                
 
 def get_shapevalue_df():
     return gpd.read_file('polygons/joined.shp')

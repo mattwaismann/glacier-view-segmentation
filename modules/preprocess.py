@@ -1,30 +1,26 @@
 import tensorflow as tf
 import numpy as np
 
-def resize_and_clean_images(rasters, dim, masks = None):
-    rasters_model = []
-    masks_model = []
-    for idx, raster in enumerate(rasters):
-        if masks:
-            mask = np.rollaxis(masks[idx],0,3)
-            mask = mask[:,:,[0]]
-            mask = tf.image.resize(mask, dim)
-            masks_model.append(mask)
-        raster = np.rollaxis(raster,0,3)
-        temp_min = raster.min()
-        raster = np.where(raster == temp_min, 0, raster) #addresses the case where negative infinity is in raster
-        raster = raster + raster.min() #make sure min is at least 0
-        if raster.max() > 0: raster = (raster-raster.min())/(raster.max()-raster.min()) #make sure max is 1
-        raster = tf.image.resize(raster, dim)
-        rasters_model.append(raster)
-    rasters_model_2 = [tensor.numpy() for tensor in rasters_model]
-    X_train = np.stack(rasters_model_2)
-    if masks: 
-        masks_model_2 = [tensor.numpy() for tensor in masks_model] #turns tensors back into numpy arrays
-        y_train = np.stack(masks_model_2)
-        return X_train,y_train
-               
-    return X_train
+def resize_list_of_numpy_arrays(list_of_numpy_arrays,dim):
+    resized_arrays = []
+    for array in list_of_numpy_arrays:
+        array = np.rollaxis(array,0,3)
+        resized_array = tf.image.resize(array, dim)
+        resized_arrays.append(resized_array.numpy())
+    return resized_arrays
+
+def normalize_list_of_numpy_arrays_to_unit_interval(list_of_numpy_arrays):
+    normalized_arrays = []
+    for array in list_of_numpy_arrays:
+        temp_max = array.max()
+        temp_min = array.min()
+        normalized_array = (array-temp_min)/(temp_max-temp_min)
+        if np.isnan(normalized_array).any():
+            normalized_arrays.append(array)
+        else:
+            normalized_arrays.append(normalized_array)
+    return normalized_arrays 
+    
 
 def subset_on_labels(X_train,y_train, labels, oos_ind):
     X_train_sub = X_train[labels,:,:,:]
